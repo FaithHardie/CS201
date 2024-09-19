@@ -9,6 +9,7 @@ editor: visual
 ```{r}
 library(tidyverse) 
 library(plotly)
+library(ggpubr)
 ```
 
 #### Read in Dataset
@@ -35,7 +36,38 @@ mtcars <- mtcars %>%
 ```
 
 ```{r}
-cars_wt_mpg <- ggplot(data =mtcars, aes(x = mpg, y = wt, label = model, color= hp)) + geom_point()
+cars_wt_mpg <- ggplot(data =mtcars, aes(x = mpg, y = wt, label = model, color= hp)) + geom_point() +
+  geom_point() +
+  geom_smooth() +
+  stat_cor()
 cars_wt_mpg
 ggplotly(cars_wt_mpg) 
+```
+
+```{r}
+##seperates the make and model of car from first column into two seperate columns useing a space as the seperation. (ex, mazda Rx4, split would be between mazda and Rx4)
+mtcsars_split <- mtcars %>%
+  separate(model, into = c("make", "model", sep = " ", extra = "merge")
+```
+
+#### Challenge:
+
+####  what is the average mpg for each car manufacturer? Plot the results
+
+```{r}
+cars_make_mpg <- ggplot(data =mtcsars_split, aes(x = mpg, y = make, label = model, color= hp)) + geom_point() +
+  geom_point()
+cars_make_mpg
+ggplotly(cars_make_mpg) 
+```
+
+```{r}
+average_cars_mpg <- mtcsars_split %>% 
+  group_by(make) %>% 
+  summarise(avg_mpg = mean(mpg))
+```
+
+```{r}
+ggplot(data = average_cars_mpg, aes(y = reorder(make, avg_mpg), x = avg_mpg)) + 
+  geom_bar(stat = "identity")
 ```
