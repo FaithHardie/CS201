@@ -71,7 +71,7 @@ What are some variables of interest to you? Speed, legendary, generation.
 
 ------------------------------------------------------------------------
 
-## EDA Assignment Prep: \[Insert Data Name Here\]
+## EDA Assignment Prep: "**Crime in Context, 1975-2015"**
 
 ### Libraries
 
@@ -84,33 +84,47 @@ library(janitor)
 ### Data
 
 ```{r}
+crimedata <- read_csv(here("data/report.csv"))
 
+crimedata <-crimedata %>% 
+  clean_names()
 ```
 
 ### Describe the data:
 
-Data author:
+Data author: The Marshall Project and Abigail Larion
 
-Description:
+Description: This is crime statistics for US cities from 1975-2015.
 
-How many observations (rows) are there?
+How many observations (rows) are there? 2829.
 
-How many variables (columns) are there?
+How many variables (columns) are there? 15.
 
 ### Summary: Quick overview
 
 ```{r}
+summary(crimedata)
 
+```
+
+```{r}
+skim_crime <- skimr::skim(crimedata) #creted skim dataset
 ```
 
 ### Categorical vs. Continuous
 
 ```{r}
-
+class(crimedata$number) 
 ```
 
 How many categorical variables are there?
 
+3: report_year, agency_code, agency_jurisdiction.
+
 How many continuous variables are there?
 
+12\.
+
 What are some variables of interest to you?
+
+population, agency_jurisdiction, violent_crimes. It would be interested to see any relationships between the population and jurisdiction to amount of crimes committed.
