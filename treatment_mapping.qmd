@@ -1,6 +1,6 @@
 ---
 title: "Treatment Mapping"
-format: pdf
+format: html
 editor: visual
 ---
 
@@ -48,16 +48,16 @@ teds_d <- read_parquet(here("data/teds_d_lecture.parquet"))
 -   Reason for Discharge
 
 ```{r}
-# teds_d_select <- teds_d %>% 
-  # select(freq1_d, stfips, services_d, los, reason)
+ teds_d_select <- teds_d %>% 
+   select(freq1_d, stfips, services_d, los, reason)
 ```
 
 ```{r}
-#write_parquet(teds_d_select, here("data/teds_d_lecture.parquet"))
+write_parquet(teds_d_select, here("data/teds_d_lecture.parquet"))
 ```
 
 ```{r}
-#teds_d_select <- read_parquet(here("data/teds_d_lecture.parquet"))
+teds_d_select <- read_parquet(here("data/teds_d_lecture.parquet"))
 ```
 
 #### NA Analysis
@@ -243,4 +243,107 @@ ggplot(percent_completed_by_state_map) +
 ### Assignment
 
 1.  Make an interactive map with `ggiraph` showing the percentage of completed treatments that end with no use at discharge
+
+    ```{r}
+    ##I used Dr. Camps version from github fridays class to guide me
+    pc_no_use <- teds_d_select %>%
+      group_by(stfips) %>%
+      summarize(
+        total_cases = n(),
+        completed_cases = sum(reason == "completed", na.rm = TRUE),
+        no_use_complete = sum(freq1_d == "no use" & reason == "completed", na.rm = TRUE)
+      ) %>%
+      mutate(
+        percent_completed = (completed_cases / total_cases) * 100,
+        percent_complete_no_use = ifelse(completed_cases > 0, (no_use_complete / completed_cases) * 100, 0))
+
+    pc_no_use$state_fips <- sprintf('%02d', pc_no_use$stfips)
+
+    pc_no_use <- full_join(pc_no_use,
+                              states_map,
+                              by = "state_fips")
+
+    interactive_pc_no_use_map <- ggplot(pc_no_use) +
+      geom_sf_interactive(
+        mapping = aes(
+          geometry = geometry,
+          fill = percent_complete_no_use,
+          tooltip = paste("State FIPS:", stfips, "<br>Completed:", round(percent_complete_no_use, 2), "%", "<br>State: ", state_name)
+        ),
+        color = "#ffffff",
+        size = 0.25
+      ) +
+      labs(fill = "Percent") +
+      ggtitle("Percent of completed treatments that end with no use at discharge") +
+      coord_sf(datum = NA) +
+      theme_minimal()
+
+    # Use `girafe` to render the interactive plot
+    girafe(ggobj = interactive_pc_no_use_map)
+
+    ```
+
 2.  How does the percentage of treatments being completed & percentage of treatments ending with no use vary by the service and length of stay. Create at least 3 visualizations to try and answer this question
+
+```{r}
+###From github
+
+percent_completed_w_services_by_state <- teds_d_select %>%
+  group_by(stfips, services_d) %>%
+  summarize(
+    total_cases = n(),
+    completed_cases = sum(reason == "completed", na.rm = TRUE)
+  ) %>%
+  mutate(percent_complete_by_service = (completed_cases / total_cases) * 100)
+
+nlevels(as.factor(percent_completed_w_services_by_state$stfips)) # checking to see that all stfips are represented
+
+percent_completed_w_services_by_state$state_fips <- sprintf('%02d', percent_completed_w_services_by_state$stfips)
+
+percent_completed_w_services_joined <- full_join(percent_completed_w_services_by_state,
+                          states_map,
+                          by = "state_fips")
+
+ggplot(percent_completed_w_services_joined, aes(x = state_abbv, y = completed_cases, fill = services_d)) +
+  geom_bar(stat = "identity") +
+   theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+###Original
+
+# Filter for a specific state
+state_data <- percent_completed_w_services_joined %>%
+  filter(state_abbv == "CA") 
+# Create a pie chart of completed cases by service type for the selected state
+ggplot(state_data, aes(x = "", y = completed_cases, fill = services_d)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y") +
+  labs(
+    title = "Distribution of Completed Cases by Service Type: CA",
+    fill = "Service Type"
+  ) +
+  theme_void() 
+
+```
+
+```{r}
+###scatterplot
+ggplot(percent_completed_w_services_by_state, aes(x = total_cases, y = percent_complete_by_service, color = services_d)) +
+  geom_point(alpha = 0.6, size = 3) +
+  labs(
+    title = "Total Cases vs. Percent Completed by Service Type",
+    x = "Total Cases",
+    y = "Percent Completed",
+    color = "Service Type"
+  ) +
+  theme_minimal()
+
+##this one didn't turn out the way I wanted
+```
+
+```{r}
+
+
+
+```
