@@ -21,13 +21,14 @@ library(rnaturalearth)
 library(rnaturalearthdata)
 library(scales)
 library(plotly)
+library(dplyr)
 ```
 
 ```{r}
 world <- ne_countries(scale = "medium", returnclass = "sf")
 class(world)
 
-report <- read_csv(here("data/report.csv"))
+data <- read_csv(here("data/report.csv"))
 
 ##My dataset is a comprehensive summary of different violent crime offenses in the US from 1997-2013, organized by state/capitals. 
 ```
@@ -50,15 +51,156 @@ These can look really basic right now. We'll talk more about themes and layers n
 
 ```{r}
 ##First I want to clean my data
-report <- report %>%
+data <- data %>%
   clean_names()
 #Checking to see the type of data is correct to work with.
-skim_data <- skimr::skim(report)
+skim_data <- skimr::skim(data)
 ```
 
 ```{r}
-##First visualization 
+#structure of the dataset
+str(data)
 
+summary(data)
+
+unique(data$report_year)          
+unique(data$agency_jurisdiction)  
+
+
+```
+
+```{r}
+data$agency_code <- as.factor(data$agency_code)
+data$agency_jurisdiction <- as.factor(data$agency_jurisdiction)
+data$report_year<- as.factor(data$report_year)
+```
+
+```{r}
+#ggplot(data, aes(x = report_year, y = agency_jurisdiction)) +
+#  geom_point()
+```
+
+```{r}
+###First Visualization
+# Aggregate 
+jurisdiction_robbery_data <- data %>%
+  group_by(jurisdiction = sub(",.*", "", agency_jurisdiction), report_year) %>%
+  summarize(total_robberies = sum(robberies, na.rm = TRUE)) %>%
+  ungroup()
+##Creating smaller set: highestpopulation
+top_jurisdiction <- jurisdiction_robbery_data %>%
+  group_by(jurisdiction) %>%
+  summarize(total_robberies_all_years = sum(total_robberies, na.rm = TRUE)) %>%
+  arrange(desc(total_robberies_all_years)) %>%
+  slice(1:10) %>%
+  pull(jurisdiction)
+
+# Filter data 
+top_jurisdiction_data <- jurisdiction_robbery_data %>%
+  filter(jurisdiction %in% top_jurisdiction)
+
+##Need to mutate factor to numeric so that the x axis labels can change to every 5 years for readability purposes
+top_jurisdiction_data <- top_jurisdiction_data %>%
+  mutate(report_year = as.numeric(as.character(report_year)))  
+
+# line chart
+ggplot(top_jurisdiction_data, aes(x = report_year, y = total_robberies, color = jurisdiction, group = jurisdiction)) +
+  geom_line(size = 1) +
+  labs(
+    title = "Robbery Trends Over Time for States with Highest Population",
+    x = "Year",
+    y = "Total Robberies",
+    color = "Jurisdiction"
+  ) +
+   scale_x_continuous(
+    breaks = seq(min(top_jurisdiction_data$report_year), max(top_jurisdiction_data$report_year), by = 5)
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+
+```
+
+```{r}
+###Second visualization
+# Filter data for 1975 and 2013 for top population
+filtered_data <- data %>%
+  filter(report_year %in% c(1975, 2013))
+
+filtered_data <- filtered_data %>%
+  mutate(homicide_rate = (homicides / population) * 100000)
+
+# 10 jurisdictions by population in 2013
+top_jurisdictions <- filtered_data %>%
+  filter(report_year == 2013) %>%
+  arrange(desc(population)) %>%
+  slice(1:10) %>%
+  pull(agency_jurisdiction)
+
+# Filter data for only top 10 jurisdictions
+top_data <- filtered_data %>%
+  filter(agency_jurisdiction %in% top_jurisdictions)
+
+# stacked bar chart
+ggplot(top_data, aes(x = agency_jurisdiction, y = homicide_rate, fill = factor(report_year))) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(
+    title = "Homicide Rates (1975 vs. 2013) for Top 10 Jurisdictions by Population",
+    x = "Jurisdiction",
+    y = "Homicide Rate (per 100,000)",
+    fill = "Year"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    plot.title = element_text(size = 10, hjust = 0.5),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 10)
+  )
+
+
+
+```
+
+```{r}
+##Part 2 of second visualization
+# Calculate homicide rate (per 100,000 population)
+filtered_data <- filtered_data %>%
+  mutate(homicide_rate = (homicides / population) * 100000)
+
+# Find the 10 jurisdictions with the lowest population in 2013
+lowest_jurisdictions <- filtered_data %>%
+  filter(report_year == 2013) %>%
+  arrange(population) %>%
+  slice(1:10) %>%
+  pull(agency_jurisdiction)
+
+# Filter data for only these 10 jurisdictions
+lowest_data <- filtered_data %>%
+  filter(agency_jurisdiction %in% lowest_jurisdictions)
+
+# Create the stacked bar chart
+ggplot(lowest_data, aes(x = agency_jurisdiction, y = homicide_rate, fill = factor(report_year))) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(
+    title = "Homicide Rates (1975 vs. 2013) for 10 Jurisdictions with Lowest Population",
+    x = "Jurisdiction",
+    y = "Homicide Rate (per 100,000)",
+    fill = "Year"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    plot.title = element_text(size = 10, hjust = 0.5),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
 
 ```
 
@@ -70,6 +212,16 @@ Please make sure you include space for at least three plots and at least one des
 
 **Important note**: You'll find some pretty neat interactive dashboards that incorporate shiny apps. We will not be covering that in this class, so please don't attempt it (...unless you really want to?)
 
+I want to have more than 3 visualizations, I was thinking 4, and if I have time I want to try do an interactive map of the US with a homicide heat map. I want to have it in a square grid, with the description for the overall data as a bar on the top of the page. (Tabset row.)
+
 What projects have you found that look nice/doable?
 
+<https://testing-apps.shinyapps.io/flexdashboard-highcharter/>
+
+I like this project because it has n example of a heat map for the US.
+
 What layout(s) do you think you want to apply?
+
+the Tabset row layout, but I don't want to just stick to that, I want to be able to be flexible depending on the amount of visualizations I need.
+
+These visualizations are not final products, the one I am happy with is the line graph. I want to make all the visualizations the same aesthetic wise for my final dashboard.
