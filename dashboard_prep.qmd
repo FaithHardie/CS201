@@ -128,6 +128,119 @@ ggplot(top_jurisdiction_data, aes(x = report_year, y = total_robberies, color = 
 ```
 
 ```{r}
+### Aggregate homicides data
+jurisdiction_homicide_data <- data %>%
+  group_by(jurisdiction = sub(",.*", "", agency_jurisdiction), report_year) %>%
+  summarize(total_homicides = sum(homicides, na.rm = TRUE)) %>%
+  ungroup()
+
+### Create smaller set: jurisdictions with the highest total homicides across all years
+top_jurisdiction <- jurisdiction_homicide_data %>%
+  group_by(jurisdiction) %>%
+  summarize(total_homicides_all_years = sum(total_homicides, na.rm = TRUE)) %>%
+  arrange(desc(total_homicides_all_years)) %>%
+  slice(1:10) %>%
+  pull(jurisdiction)
+
+### Exclude "United States"
+top_jurisdiction <- setdiff(top_jurisdiction, "United States")
+
+### Filter data for top jurisdictions and years 1975 and 2015
+data_1975 <- jurisdiction_homicide_data %>%
+  filter(jurisdiction %in% top_jurisdiction, report_year == 1975)
+
+data_2015 <- jurisdiction_homicide_data %>%
+  filter(jurisdiction %in% top_jurisdiction, report_year == 2015)
+
+### Histogram for 1975
+ggplot(data_1975, aes(x = jurisdiction, y = total_homicides, fill = jurisdiction)) +
+  geom_col() +
+  labs(
+    title = "Total Homicides in 1975 for Top Jurisdictions",
+    x = "Jurisdiction",
+    y = "Total Homicides",
+    fill = "Jurisdiction"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 10, angle = 45, hjust = 1),
+    legend.position = "none"
+  )
+
+### Histogram for 2015
+ggplot(data_2015, aes(x = jurisdiction, y = total_homicides, fill = jurisdiction)) +
+  geom_col() +
+  labs(
+    title = "Total Homicides in 2015 for Top Jurisdictions",
+    x = "Jurisdiction",
+    y = "Total Homicides",
+    fill = "Jurisdiction"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 10, angle = 45, hjust = 1),
+    legend.position = "none"
+  )
+
+
+```
+
+```{r}
+### First Visualization: Homicides
+
+# Aggregate homicides data
+jurisdiction_homicide_data <- data %>%
+  group_by(jurisdiction = sub(",.*", "", agency_jurisdiction), report_year) %>%
+  summarize(total_homicides = sum(homicides, na.rm = TRUE)) %>%
+  ungroup()
+
+# Create smaller set: jurisdictions with the highest total homicides
+top_jurisdiction <- jurisdiction_homicide_data %>%
+  group_by(jurisdiction) %>%
+  summarize(total_homicides_all_years = sum(total_homicides, na.rm = TRUE)) %>%
+  arrange(desc(total_homicides_all_years)) %>%
+  slice(1:10) %>%
+  pull(jurisdiction)
+
+# Filter data for top jurisdictions
+top_jurisdiction_data <- jurisdiction_homicide_data %>%
+  filter(jurisdiction %in% top_jurisdiction)
+
+# Convert report_year to numeric for proper axis labeling
+top_jurisdiction_data <- top_jurisdiction_data %>%
+  mutate(report_year = as.numeric(as.character(report_year)))
+
+# Line chart
+ggplot(top_jurisdiction_data, aes(x = report_year, y = total_homicides, color = jurisdiction, group = jurisdiction)) +
+  geom_line(size = 1) +
+  labs(
+    title = "Homicide Trends Over Time for Jurisdictions with Highest Homicides",
+    x = "Year",
+    y = "Total Homicides",
+    color = "Jurisdiction"
+  ) +
+  scale_x_continuous(
+    breaks = seq(min(top_jurisdiction_data$report_year), max(top_jurisdiction_data$report_year), by = 5)
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 16, hjust = 0.5),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 10),
+    legend.title = element_text(size = 12),
+    legend.text = element_text(size = 10)
+  )
+
+```
+
+```{r}
 ###Second visualization
 # Filter data for 1975 and 2013 for top population
 filtered_data <- data %>%
@@ -163,6 +276,7 @@ ggplot(top_data, aes(x = agency_jurisdiction, y = homicide_rate, fill = factor(r
     legend.title = element_text(size = 10),
     legend.text = element_text(size = 10)
   )
+
 
 
 
@@ -225,3 +339,82 @@ What layout(s) do you think you want to apply?
 the Tabset row layout, but I don't want to just stick to that, I want to be able to be flexible depending on the amount of visualizations I need.
 
 These visualizations are not final products, the one I am happy with is the line graph. I want to make all the visualizations the same aesthetic wise for my final dashboard.
+
+```{r}
+# Load required libraries
+library(tidyverse)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(sf)
+library(leaflet)
+library(htmlwidgets)
+library(usdata)
+
+# Prepare crime data for 2015
+data_2015 <- data %>%
+  filter(report_year == 2015) %>%
+  group_by(state = sub(".*, ", "", agency_jurisdiction)) %>%
+  summarize(
+    total_population = sum(population, na.rm = TRUE),
+    total_violent_crimes = sum(violent_crimes, na.rm = TRUE),
+    violent_crime_rate = (sum(violent_crimes, na.rm = TRUE) / sum(population, na.rm = TRUE)) * 100000
+  ) %>%
+  ungroup() %>%
+  mutate(state = abbr2state(state)) # Convert abbreviations to full names
+
+# Load U.S. state geometries
+us_states <- ne_states(country = "United States of America", returnclass = "sf") %>%
+  filter(!name %in% c("Hawaii", "Alaska")) # Exclude Hawaii and Alaska
+
+# Merge crime data with spatial data
+us_states <- us_states %>%
+  left_join(data_2015, by = c("name" = "state"))
+
+# Check for missing data
+if (all(is.na(us_states$violent_crime_rate))) {
+  stop("The violent_crime_rate column contains only NA values. Check the join or data preparation.")
+}
+
+# Create the heatmap with a title
+map <- leaflet(us_states) %>%
+  addTiles() %>%
+  addPolygons(
+    fillColor = ~colorNumeric(palette = "YlOrRd", domain = us_states$violent_crime_rate)(violent_crime_rate),
+    weight = 1,
+    color = "white",
+    fillOpacity = 0.7,
+    label = ~paste0(
+      name, "<br>",
+      "Violent Crime Rate: ", round(violent_crime_rate, 2), " per 100,000 people"
+    )
+  ) %>%
+  addLegend(
+    pal = colorNumeric(palette = "YlOrRd", domain = us_states$violent_crime_rate),
+    values = ~violent_crime_rate,
+    title = "Violent Crime Rate<br>(per 100,000)",
+    position = "bottomright" # Move legend to top-left
+  )
+
+# Add a title to the map
+map <- htmlwidgets::prependContent(
+  map,
+  htmltools::tags$h2("Violent Crime Rates US 2015", style = "text-align:center; margin: 10px;")
+)
+
+# Display the map
+map
+
+```
+
+```{r}
+#write.csv(jurisdiction_homicide_data, "C:/Users/faith/OneDrive/Documents/github/CS201_dashboard/data/jurisdiction_homicide_data.csv", row.names = FALSE)
+
+write.csv(jurisdiction_robbery_data, "C:/Users/faith/OneDrive/Documents/github/CS201_dashboard/data/jurisdiction_robbery_data.csv", row.names = FALSE)
+
+write.csv(data_2015, "C:/Users/faith/OneDrive/Documents/github/CS201_dashboard/data/data_2015.csv", row.names = FALSE)
+
+```
+
+```{r}
+getwd()
+```
